@@ -1,18 +1,18 @@
 
-data "google_project" "this" {}
 
 resource "google_compute_instance" "daemon" {
 
-  name = "dagster-daemon"
-  zone = "europe-west1-b"
+  name    = var.daemon_instance_name
+  project = var.project
+  zone    = var.daemon_zone
 
   network_interface {
-    network    = data.terraform_remote_state.bootstrap_shared.outputs["vpc_id"]
-    subnetwork = data.terraform_remote_state.bootstrap_shared.outputs["subnets"]["europe-west1/primary"].self_link
+    network    = var.network
+    subnetwork = var.subnetwork
   }
 
   service_account {
-    email  = "dagster@cfarm-tech-${local.env}-apps.iam.gserviceaccount.com"
+    email  = google_service_account.primary.email
     scopes = ["cloud-platform"]
   }
 
@@ -22,7 +22,7 @@ resource "google_compute_instance" "daemon" {
     automatic_restart  = true
   }
 
-  machine_type = "e2-small"
+  machine_type = var.daemon_machine_type
 
   boot_disk {
     initialize_params {
@@ -31,10 +31,7 @@ resource "google_compute_instance" "daemon" {
     }
   }
 
-  labels = {
-    enable-ops-agent = "true"
-    application      = "dagster",
-  }
+  labels = var.labels
 
   metadata = {
     google-logging-enabled    = "true"
@@ -43,23 +40,26 @@ resource "google_compute_instance" "daemon" {
 spec:
   containers:
     - name: dagster-daemon
-      image: '${local.dagster_image}'
-      args: ["daemon"]
+      image: '${var.daemon_image}'
+      command: ${jsonencode(var.daemon_command)}
+      args: ${jsonencode(var.daemon_args)}
       env:
         - name: DATABASE_HOST
-          value: "${data.terraform_remote_state.postgres_shared.outputs.db_instance_private_ip}"
+          value: "${var.db_instance_private_ip}"
         - name: DATABASE_USER
-          value: "dagster"
+          value: "${var.db_user}"
         - name: DATABASE_DBNAME
-          value: "dagster"
+          value: "${var.db_database_name}"
         - name: DATABASE_SCHEMA
-          value: "public"
+          value: "${var.db_schema}"
         - name: DATABASE_PASSWORD_SECRET_NAME
-          value: "${module.webserver.sql_password_secret_id}/versions/latest"
-        - name: CODE_SERVER_HOST_CORE
-          value: "${replace(google_cloud_run_v2_service.code_server["core"].uri, "https://", "")}"
+          value: "${google_secret_manager_secret_version.dagster_db_password.id}"
+        %{for name, svc in google_cloud_run_v2_service.code_server}
+        - name: CODE_SERVER_HOST_${upper(name)}
+          value: "${replace(svc.uri, "https://", "")}"
+        %{endfor}
         - name: GOOGLE_CLOUD_PROJECT
-          value: "${data.google_project.this.project_id}"
+          value: "${var.project}"
       stdin: false
       tty: false
   restartPolicy: Always

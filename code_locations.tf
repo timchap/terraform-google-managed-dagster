@@ -1,103 +1,81 @@
 
 
-locals {
-  code_locations = {
-    core = {
-      image             = "europe-docker.pkg.dev/cfarm-tech-registry/dagster-cl-core/dagster-cl-core:${local.image_tag}"
-      run_worker_cpu    = "1"
-      run_worker_memory = "4Gi"
-    }
-  }
-}
 
 resource "google_cloud_run_v2_service" "code_server" {
-  for_each = local.code_locations
+  for_each = var.code_locations
   name     = "dagster-code-server-${each.key}"
-
-  location = local.region
+  project  = var.project
+  location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
-  lifecycle {
-    ignore_changes = [
-      template[0].labels,
-      template[0].containers[0].image,
-      client,
-      client_version,
-    ]
-  }
-
-  labels = {
-    "application" = "dagster"
-  }
+  labels = var.labels
 
   template {
-    service_account = "dagster@cfarm-tech-${local.env}-apps.iam.gserviceaccount.com"
+    service_account = google_service_account.primary.email
 
     vpc_access {
-      connector = data.terraform_remote_state.bootstrap_shared.outputs.vpc_access_connectors[local.region]
+      connector = var.vpc_connector_id
       egress    = "PRIVATE_RANGES_ONLY"
     }
 
+    execution_environment = var.execution_environment
+
     scaling {
       min_instance_count = 0
-      max_instance_count = 1
+      max_instance_count = 1 # Dagster currently supports only one code server instance per code location
     }
 
     containers {
       image = each.value.image
-      args  = ["dagster", "api", "grpc", "--host", "0.0.0.0", "--port", "3000", "--module-name", "definitions"]
+      command = var.code_server_command
+      args  = ["--host", "0.0.0.0", "--port", "${each.value.port}", "--module-name", each.value.module_name]
 
       env {
         name  = "GOOGLE_CLOUD_PROJECT"
-        value = local.project
+        value = var.project
       }
 
       env {
         name  = "DATABASE_HOST"
-        value = data.terraform_remote_state.postgres_shared.outputs.db_instance_private_ip
+        value = var.db_instance_private_ip
       }
 
       env {
         name  = "DATABASE_USER"
-        value = "dagster"
+        value = var.db_user
       }
 
       env {
         name  = "DATABASE_DBNAME"
-        value = "dagster"
+        value = var.db_database_name
       }
 
       env {
         name  = "DATABASE_SCHEMA"
-        value = "public"
+        value = var.db_schema
       }
 
       env {
         name = "DATABASE_PASSWORD"
         value_source {
           secret_key_ref {
-            secret  = module.webserver.sql_password_secret_id
-            version = "latest"
+            secret  = google_secret_manager_secret.dagster_db_password.secret_id
+            version = google_secret_manager_secret_version.dagster_db_password.version
           }
         }
       }
 
-      env {
-        name  = "DAGSTER_EVENT_BATCH_SIZE"
-        value = "25"
-      }
-
       ports {
         name           = "h2c"
-        container_port = 3000
+        container_port = each.value.port
       }
 
       resources {
         limits = {
-          memory = "2Gi"
-          cpu    = "1"
+          memory = var.code_server_resources.limits.memory
+          cpu    = var.code_server_resources.limits.cpu
         }
-        cpu_idle = true
+        cpu_idle = var.code_server_resources.cpu_idle
       }
 
       startup_probe {
@@ -112,104 +90,81 @@ resource "google_cloud_run_v2_service" "code_server" {
       }
     }
   }
+
+  depends_on = [
+    google_secret_manager_secret_iam_member.primary_can_get_secrets
+  ]
 }
 
 resource "google_cloud_run_v2_job" "run_worker" {
-  for_each = local.code_locations
+  for_each = google_service_account.run_worker
   name     = "dagster-run-worker-${each.key}"
+  project  = var.project
+  location = var.region
 
-  location = local.region
-
-  lifecycle {
-    ignore_changes = [
-      template[0].labels,
-      template[0].template[0].containers[0].image,
-      client,
-      client_version,
-    ]
-  }
-
-  labels = {
-    "application" = "dagster"
-  }
+  labels = var.labels
 
   template {
     template {
-      service_account = "dagster@cfarm-tech-${local.env}-apps.iam.gserviceaccount.com"
+      service_account = each.value.email
 
       max_retries = 0
 
       vpc_access {
-        connector = data.terraform_remote_state.bootstrap_shared.outputs.vpc_access_connectors[local.region]
+        connector = var.vpc_connector_id
         egress    = "PRIVATE_RANGES_ONLY"
       }
 
-      timeout = "86400s"
+      timeout = "${var.run_worker_job_timeout_seconds}s"
 
       containers {
-        image = each.value.image
+        image = var.code_locations[each.key].image
+
+        env {
+          name  = "GOOGLE_CLOUD_PROJECT"
+          value = var.project
+        }
 
         env {
           name  = "DATABASE_HOST"
-          value = data.terraform_remote_state.postgres_shared.outputs.db_instance_private_ip
+          value = var.db_instance_private_ip
         }
 
         env {
           name  = "DATABASE_USER"
-          value = "dagster"
+          value = var.db_user
         }
 
         env {
           name  = "DATABASE_DBNAME"
-          value = "dagster"
+          value = var.db_database_name
         }
 
         env {
           name  = "DATABASE_SCHEMA"
-          value = "public"
+          value = var.db_schema
         }
 
         env {
           name = "DATABASE_PASSWORD"
           value_source {
             secret_key_ref {
-              secret  = module.webserver.sql_password_secret_id
-              version = "latest"
+              secret  = google_secret_manager_secret.dagster_db_password.secret_id
+              version = google_secret_manager_secret_version.dagster_db_password.version
             }
           }
         }
 
         resources {
-          limits = {
-            memory = each.value.run_worker_memory
-            cpu    = each.value.run_worker_cpu
-          }
+          limits = var.code_locations[each.key].run_worker_resources_limits
         }
       }
     }
   }
+
+  depends_on = [
+    google_secret_manager_secret_iam_member.run_workers_can_get_secrets
+  ]
+
 }
 
-resource "google_cloud_run_v2_service_iam_member" "code_server_is_open" {
-  for_each = google_cloud_run_v2_service.code_server
-  name     = each.value.name
-  location = each.value.location
-  role     = "roles/run.invoker"
-  member   = "allUsers"
-}
-
-resource "google_cloud_run_v2_job_iam_member" "webserver_can_execute_run_worker" {
-  for_each = google_cloud_run_v2_job.run_worker
-  name     = each.value.name
-  location = each.value.location
-  role     = "roles/run.admin"
-  member   = "serviceAccount:${module.webserver.service_account_email}"
-}
-
-# For some reason, setting run.developer or even run.admin permissions at job level
-# does not allow executions to be cancelled. So we need to set it at project level.
-resource "google_project_iam_member" "webserver_can_execute_run_worker" {
-  role    = "roles/run.developer"
-  member  = "serviceAccount:${module.webserver.service_account_email}"
-  project = local.project
-}

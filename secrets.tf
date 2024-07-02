@@ -1,14 +1,12 @@
-resource "google_secret_manager_secret" "sql_password" {
-  for_each  = google_sql_user.app
-  secret_id = "${var.db_instance_name}-${each.value.name}-password"
-
+resource "google_secret_manager_secret" "dagster_db_password" {
+  secret_id = "${var.db_instance_name}-${var.db_user}-password"
+  project   = var.project
   replication {
     auto {}
   }
 }
 
-resource "google_secret_manager_secret_version" "sql_password" {
-  for_each    = random_password.password
-  secret      = google_secret_manager_secret.sql_password["default"].id
-  secret_data = each.value.result
+resource "google_secret_manager_secret_version" "dagster_db_password" {
+  secret      = google_secret_manager_secret.dagster_db_password.id
+  secret_data = random_password.password.result
 }
