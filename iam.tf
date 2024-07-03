@@ -58,3 +58,22 @@ resource "google_artifact_registry_repository_iam_member" "run_workers_can_read_
   project = var.artifact_registry_repository.project
   role       = "roles/artifactregistry.reader"
 }
+
+resource "google_storage_bucket_iam_member" "primary_can_use_io_bucket" {
+  bucket = var.io_bucket
+  member = google_service_account.primary.member
+  role   = "roles/storage.objectUser"
+}
+
+resource "google_storage_bucket_iam_member" "run_workers_can_use_io_bucket" {
+  for_each = google_service_account.run_worker
+  bucket = var.io_bucket
+  member = each.value.member
+  role   = "roles/storage.objectUser"
+}
+
+resource "google_storage_bucket_iam_member" "primary_can_use_logs_bucket" {
+  bucket = var.io_bucket
+  member = google_service_account.primary.member
+  role   = "roles/storage.objectUser"
+}

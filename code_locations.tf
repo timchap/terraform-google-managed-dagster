@@ -123,6 +123,16 @@ resource "google_cloud_run_v2_job" "run_worker" {
         image = var.code_locations[each.key].image
 
         env {
+          name  = "DAGSTER_LOGS_BUCKET"
+          value = google_storage_bucket.logs.name
+        }
+
+        env {
+          name  = "DAGSTER_IO_BUCKET"  # Not used by Dagster, but can be fetched in code to configure a GCSPickleIOManager
+          value = google_storage_bucket.io.name
+        }
+
+        env {
           name  = "GOOGLE_CLOUD_PROJECT"
           value = var.project
         }

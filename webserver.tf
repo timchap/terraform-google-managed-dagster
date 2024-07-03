@@ -47,6 +47,11 @@ resource "google_cloud_run_v2_service" "webserver" {
       }
 
       env {
+        name  = "DAGSTER_LOGS_BUCKET"
+        value = google_storage_bucket.logs.name
+      }
+
+      env {
         name  = "DATABASE_HOST"
         value = var.db_instance_private_ip
       }

@@ -61,6 +61,8 @@ spec:
         %{endfor}
         - name: GOOGLE_CLOUD_PROJECT
           value: "${var.project}"
+        - name: DAGSTER_LOGS_BUCKET
+          value: "${google_storage_bucket.logs.name}"
       stdin: false
       tty: false
   restartPolicy: Always
