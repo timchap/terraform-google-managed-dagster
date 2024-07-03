@@ -1,5 +1,4 @@
 
-
 # Code servers allow unauthenticated requests as they are only accessible from the internal network.
 resource "google_cloud_run_v2_service_iam_member" "code_server_is_open" {
   for_each = google_cloud_run_v2_service.code_server
