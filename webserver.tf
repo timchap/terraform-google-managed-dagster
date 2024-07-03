@@ -33,8 +33,18 @@ resource "google_cloud_run_v2_service" "webserver" {
     containers {
 
       image = var.webserver_image
-      command = var.webserver_command
+
       args  = var.webserver_args
+
+      env {
+        name  = "GOOGLE_CLOUD_PROJECT"
+        value = var.project
+      }
+
+      env {
+        name  = "GOOGLE_CLOUD_REGION"
+        value = var.region
+      }
 
       env {
         name  = "DATABASE_HOST"

@@ -27,8 +27,9 @@ resource "google_cloud_run_v2_service" "code_server" {
 
     containers {
       image = each.value.image
-      command = var.code_server_command
-      args  = ["--host", "0.0.0.0", "--port", "${each.value.port}", "--module-name", each.value.module_name]
+
+      # Cloud Run seems to not support a completely empty entrypoint, so we use `command` rather than `args`
+      command  = ["dagster", "api", "grpc", "--host", "0.0.0.0", "--port", "${each.value.port}", "--module-name", each.value.module_name]
 
       env {
         name  = "GOOGLE_CLOUD_PROJECT"
@@ -92,7 +93,8 @@ resource "google_cloud_run_v2_service" "code_server" {
   }
 
   depends_on = [
-    google_secret_manager_secret_iam_member.primary_can_get_secrets
+    google_secret_manager_secret_iam_member.primary_can_get_secrets,
+    google_artifact_registry_repository_iam_member.primary_can_read_artifacts
   ]
 }
 
@@ -163,7 +165,8 @@ resource "google_cloud_run_v2_job" "run_worker" {
   }
 
   depends_on = [
-    google_secret_manager_secret_iam_member.run_workers_can_get_secrets
+    google_secret_manager_secret_iam_member.run_workers_can_get_secrets,
+    google_artifact_registry_repository_iam_member.run_workers_can_read_artifacts
   ]
 
 }

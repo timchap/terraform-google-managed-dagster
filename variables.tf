@@ -28,14 +28,8 @@ variable "daemon_image" {
 
 variable "daemon_args" {
   type    = list(string)
-  default = []
+  default = ["dagster-daemon", "run"]
   description = "Arguments to pass to the daemon"
-}
-
-variable "daemon_command" {
-  type        = list(string)
-  description = "Entrypoint command to run in the daemon container"
-  default = ["dagster", "daemon"]
 }
 
 variable "daemon_instance_name" {
@@ -47,12 +41,12 @@ variable "daemon_instance_name" {
 # Database Configuration
 variable "db_instance_name" {
   type        = string
-  description = "Name of the database to connect to"
+  description = "Name of the Cloud SQL instance to connect to"
 }
 
 variable "db_instance_private_ip" {
   type        = string
-  description = "Private IP of the database to connect to"
+  description = "Private IP of the Cloud SQL instance to connect to"
 }
 
 variable "db_database_name" {
@@ -97,7 +91,7 @@ variable "webserver_image" {
 
 variable "webserver_args" {
   type    = list(string)
-  default = ["--host", "0.0.0.0", "--port", "3000"]
+  default = ["dagster-webserver", "--host", "0.0.0.0", "--port", "3000"]
   description = "Arguments to pass to the webserver"
 }
 
@@ -156,8 +150,8 @@ variable "webserver_startup_probe" {
   })
   default = {
     initial_delay_seconds = 0
-    timeout_seconds       = 10
-    period_seconds        = 10
+    timeout_seconds       = 30
+    period_seconds        = 30
     failure_threshold     = 3
     http_path             = "/server_info"
     http_port             = 3000
@@ -187,12 +181,6 @@ variable "webserver_service_name" {
   type        = string
   description = "Name of the webserver service"
   default = "dagster-webserver"
-}
-
-variable "webserver_command" {
-  type        = list(string)
-  description = "Entrypoint command to run in the webserver container"
-  default = ["dagster-webserver"]
 }
 
 variable "webserver_max_instance_request_concurrency" {
@@ -231,12 +219,6 @@ variable "code_locations" {
     port        = number
   }))
   description = "Configuration for code locations"
-}
-
-variable "code_server_command" {
-  type        = list(string)
-  description = "Entrypoint command to run in the code server container"
-  default = ["dagster", "api", "grpc"]
 }
 
 # Logging and Monitoring
@@ -289,4 +271,14 @@ variable "execution_environment" {
   type    = string
   default = "EXECUTION_ENVIRONMENT_GEN1"
   description = "Execution environment for all Cloud Run services"
+}
+
+variable "artifact_registry_repository" {
+  type        = object({
+    name = string
+    location = string
+    project = string
+  })
+  description = "Name of the artifact registry repository, used to grant pull access to service accounts (optional)"
+  default = null
 }

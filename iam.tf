@@ -41,3 +41,21 @@ resource "google_secret_manager_secret_iam_member" "run_workers_can_get_secrets"
   role      = "roles/secretmanager.secretAccessor"
   member    = each.value.member
 }
+
+resource "google_artifact_registry_repository_iam_member" "primary_can_read_artifacts" {
+  count = var.artifact_registry_repository == null ? 0 : 1
+  member     = google_service_account.primary.member
+  repository = var.artifact_registry_repository.name
+  location = var.artifact_registry_repository.location
+  project = var.artifact_registry_repository.project
+  role       = "roles/artifactregistry.reader"
+}
+
+resource "google_artifact_registry_repository_iam_member" "run_workers_can_read_artifacts" {
+  for_each = var.artifact_registry_repository == null ? {} : var.code_locations
+  member     = google_service_account.run_worker[each.key].member
+  repository = var.artifact_registry_repository.name
+  location = var.artifact_registry_repository.location
+  project = var.artifact_registry_repository.project
+  role       = "roles/artifactregistry.reader"
+}

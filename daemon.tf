@@ -35,13 +35,14 @@ resource "google_compute_instance" "daemon" {
 
   metadata = {
     google-logging-enabled    = "true"
+
+    # The container spec below is subject to change, see
     gce-container-declaration = <<EOF
 
 spec:
   containers:
     - name: dagster-daemon
       image: '${var.daemon_image}'
-      command: ${jsonencode(var.daemon_command)}
       args: ${jsonencode(var.daemon_args)}
       env:
         - name: DATABASE_HOST
@@ -79,4 +80,8 @@ sudo apt-get install -y google-cloud-ops-agent
 echo "Done."
 EOF
 
+  depends_on = [
+    google_secret_manager_secret_iam_member.primary_can_get_secrets,
+    google_artifact_registry_repository_iam_member.primary_can_read_artifacts
+  ]
 }
